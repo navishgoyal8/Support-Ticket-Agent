@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+python-dotenv
+langgraph
+langgraph-checkpoint-sqlite
+aiosqlite
+langchain-core
+langchain-groq
+langfuse
+langchain
+mcp<2
