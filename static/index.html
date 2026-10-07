@@ -84,14 +84,14 @@ let threadId = null;
 
 const SAMPLES = [
   ["Duplicate charge (refund)", "I was charged twice this month! Please refund the duplicate charge.", "C-1042"],
-  ["Wrong customer id", "My customer id is C-9999. I was charged twice, please refund me.", "C-1042"],
-  ["No customer id", "I was charged twice, please refund me.", ""],
+//   ["Wrong customer id", "My customer id is C-9999. I was charged twice, please refund me.", "C-1042"],
+//   ["No customer id", "I was charged twice, please refund me.", ""],
   ["Password reset", "I forgot my password and can't log in.", "C-1042"],
   ["Cancel subscription", "How do I cancel my subscription?", "C-1042"],
   ["Not in knowledge base", "Do you offer a public API with webhooks for enterprise plans?", "C-1042"],
-  ["Angry customer", "This is unacceptable, I'm cancelling and telling everyone!", "C-1042"],
+//   ["Angry customer", "This is unacceptable, I'm cancelling and telling everyone!", "C-1042"],
   ["Vague ticket", "it doesn't work", "C-1042"],
-  ["Absurd refund amount", "Refund me 50000 for the duplicate charge right now.", "C-1042"],
+//   ["Absurd refund amount", "Refund me 50000 for the duplicate charge right now.", "C-1042"],
 ];
 SAMPLES.forEach(([label], i) => {
   const o = document.createElement("option"); o.value = i; o.textContent = label; $("sample").append(o);
