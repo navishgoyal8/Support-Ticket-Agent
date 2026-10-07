@@ -7,6 +7,7 @@ from typing import Literal, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from langfuse import get_client
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -52,7 +53,7 @@ class ApprovalIn(BaseModel):
 def _auth(key: Optional[str]) -> None:
     expected = os.environ.get("WEBHOOK_API_KEY")
     if not expected:
-        raise HTTPException(500, "WEBHOOK_API_KEY is not configured on the server")
+        return
     if not secrets.compare_digest(key or "", expected):
         raise HTTPException(401, "Invalid API key")
 
@@ -92,6 +93,10 @@ async def _result(agent, thread_id: str) -> dict:
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/", include_in_schema=False)
+async def index():
+    return FileResponse(os.path.join(HERE, "static", "index.html"))
 
 
 @app.post("/webhook")

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Ticket Agent</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#667085; --line:#e4e7ec;
+          --accent:#3b5bdb; --ok:#1a7f4b; --warn:#b54708; --bad:#b42318; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161a; --card:#1c1f26; --text:#e8eaed; --muted:#9aa3b2; --line:#2c313b;
+            --accent:#7c93ff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; } }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  label { display:block; font-size:.8rem; color:var(--muted); margin: 10px 0 4px; }
+  input, textarea, select { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px;
+                            background:var(--bg); color:var(--text); font: inherit; }
+  textarea { min-height: 90px; resize: vertical; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; } .row > div { flex:1; min-width: 200px; }
+  button { padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font: inherit; cursor:pointer; }
+  button.ok { background: var(--ok); } button.bad { background: var(--bad); } button.ghost { background: transparent; color: var(--accent); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:wait; }
+  .actions { display:flex; gap:10px; margin-top:14px; align-items:center; flex-wrap:wrap; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:99px; font-size:.8rem; border:1px solid currentColor; }
+  .badge.ok { color:var(--ok); } .badge.warn { color:var(--warn); } .badge.bad { color:var(--bad); }
+  .grid { display:grid; grid-template-columns: 140px 1fr; gap:8px 12px; margin-top:12px; }
+  .k { color:var(--muted); font-size:.85rem; } .v { white-space: pre-wrap; word-break: break-word; }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; font-size:.8rem; }
+  .banner { border:1px solid var(--bad); color:var(--bad); border-radius:8px; padding:10px; margin-bottom:16px; }
+  .status { color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Support Ticket Agent</h1>
+  <p class="sub">Send a ticket to the agent, then approve or reject any refund it requests.</p>
+
+  <div id="error" class="banner" hidden></div>
+
+  <div class="card">
+
+    <label for="sample">Sample ticket</label>
+    <select id="sample"><option value="">Choose a sample (optional)</option></select>
+
+    <label for="ticket">Ticket</label>
+    <textarea id="ticket" placeholder="Describe the customer's problem"></textarea>
+
+    <div class="row">
+      <div><label for="customer">Customer ID (optional)</label><input id="customer" placeholder="C-1042"></div>
+    </div>
+
+    <div class="actions">
+      <button id="send">Send ticket</button>
+      <span id="busy" class="status" hidden>Working... the first request after idle can take about a minute.</span>
+    </div>
+  </div>
+
+  <div id="approval" class="card" hidden>
+    <strong>Human approval required</strong>
+    <p class="sub">The agent wants to run this high-stakes action:</p>
+    <pre id="pending"></pre>
+    <div class="actions">
+      <button id="approve" class="ok">Approve</button>
+      <button id="reject" class="bad">Reject</button>
+    </div>
+  </div>
+
+  <div id="result" class="card" hidden>
+    <span id="badge" class="badge"></span>
+    <span class="status">thread: <span id="thread"></span></span>
+    <div id="fields" class="grid"></div>
+    <details style="margin-top:14px"><summary class="status">Raw JSON response</summary><pre id="raw"></pre></details>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let threadId = null;
+
+const SAMPLES = [
+  ["Duplicate charge (refund)", "I was charged twice this month! Please refund the duplicate charge.", "C-1042"],
+  ["Wrong customer id", "My customer id is C-9999. I was charged twice, please refund me.", "C-1042"],
+  ["No customer id", "I was charged twice, please refund me.", ""],
+  ["Password reset", "I forgot my password and can't log in.", "C-1042"],
+  ["Cancel subscription", "How do I cancel my subscription?", "C-1042"],
+  ["Not in knowledge base", "Do you offer a public API with webhooks for enterprise plans?", "C-1042"],
+  ["Angry customer", "This is unacceptable, I'm cancelling and telling everyone!", "C-1042"],
+  ["Vague ticket", "it doesn't work", "C-1042"],
+  ["Absurd refund amount", "Refund me 50000 for the duplicate charge right now.", "C-1042"],
+];
+SAMPLES.forEach(([label], i) => {
+  const o = document.createElement("option"); o.value = i; o.textContent = label; $("sample").append(o);
+});
+$("sample").addEventListener("change", () => {
+  const s = SAMPLES[$("sample").value]; if (!s) return;
+  $("ticket").value = s[1]; $("customer").value = s[2];
+});
+
+
+function setBusy(on) {
+  document.querySelectorAll("button").forEach((b) => (b.disabled = on));
+  $("busy").hidden = !on;
+}
+function showError(msg) { $("error").textContent = msg; $("error").hidden = !msg; }
+
+async function api(path, payload) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const detail = data && data.detail;
+    throw new Error(`HTTP ${res.status}: ` + (typeof detail === "string" ? detail : JSON.stringify(detail || data)));
+  }
+  return data;
+}
+
+function renderResult(d) {
+  threadId = d.thread_id;
+  $("thread").textContent = d.thread_id;
+  const badge = $("badge");
+  badge.textContent = d.status.replace("_", " ");
+  badge.className = "badge " + (d.status === "completed" ? "ok" : d.status === "awaiting_approval" ? "warn" : "bad");
+
+  const box = $("fields"); box.replaceChildren();
+  const add = (k, v) => {
+    if (v === null || v === undefined || v === "") return;
+    const dt = document.createElement("div"); dt.className = "k"; dt.textContent = k;
+    const dd = document.createElement("div"); dd.className = "v";
+    dd.textContent = typeof v === "string" ? v : JSON.stringify(v);
+    box.append(dt, dd);
+  };
+  add("Category", d.category); add("Urgency", d.urgency); add("Resolution", d.resolution);
+  add("Reply", d.reply); add("Escalation reason", d.escalation_reason);
+  add("Iterations", d.iterations); add("Errors", d.errors && d.errors.length ? d.errors : null);
+
+  const pending = d.status === "awaiting_approval";
+  $("approval").hidden = !pending;
+  if (pending) $("pending").textContent = JSON.stringify(d.pending_actions, null, 2);
+  $("raw").textContent = JSON.stringify(d, null, 2);
+  $("result").hidden = false;
+}
+
+async function run(path, payload) {
+  showError(""); setBusy(true);
+  try { renderResult(await api(path, payload)); }
+  catch (e) { showError(e.message); }
+  finally { setBusy(false); }
+}
+
+$("send").addEventListener("click", () => {
+  const ticket = $("ticket").value.trim();
+  if (!ticket) return showError("Please enter a ticket.");
+  $("approval").hidden = true; $("result").hidden = true;
+  run("/webhook", { ticket, customer_id: $("customer").value.trim() || null });
+});
+$("approve").addEventListener("click", () => run("/approve", { thread_id: threadId, decision: "approve" }));
+$("reject").addEventListener("click", () => run("/approve", { thread_id: threadId, decision: "reject" }));
+</script>
+</body>
+</html>
